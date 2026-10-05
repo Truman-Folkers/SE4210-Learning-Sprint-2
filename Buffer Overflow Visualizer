@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Buffer Overflow Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .byte-cell { transition: background-color 0.3s ease, color 0.3s ease, transform 0.1s ease; }
+        .byte-filled { transform: scale(1.05); }
+        .pulsing-danger { animation: pulse-red 1.5s infinite; }
+        @keyframes pulse-red {
+            0%, 100% { background-color: #fee2e2; border-color: #ef4444; }
+            50% { background-color: #fca5a5; border-color: #b91c1c; }
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-800 p-4 md:p-8 flex flex-col items-center">
+
+    <div class="max-w-6xl w-full">
+        <header class="mb-8 text-center md:text-left">
+            <h1 class="text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight">Interactive Buffer Overflow Visualizer</h1>
+            <p class="text-slate-500 mt-2 text-lg">Understand how bounds-checking failures lead to memory corruption.</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <div class="lg:col-span-7 bg-white rounded-2xl shadow-xl p-6 border border-slate-100 flex flex-col">
+                <h2 class="text-2xl font-bold mb-4 border-b pb-2 text-slate-800">Stack Memory View</h2>
+                
+                <div class="mb-6 space-y-4">
+                    <div>
+                        <label for="inputString" class="block text-sm font-semibold text-slate-700 mb-1">
+                            Enter string to copy into Buffer (Max safe size: 8):
+                        </label>
+                        <div class="flex gap-2">
+                            <input type="text" id="inputString" maxlength="16" placeholder="Type here..." autocomplete="off"
+                                class="flex-1 px-4 py-2 border-2 border-slate-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-lg font-mono">
+                            <button id="resetBtn" class="px-6 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-lg transition-colors">
+                                Reset
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="statusBox" class="p-4 rounded-lg bg-green-50 border border-green-200 text-green-800 font-medium transition-all duration-300 min-h-[4rem] flex items-center">
+                        Status: Safe. The buffer has plenty of space.
+                    </div>
+                </div>
+
+                <div class="flex-1 bg-slate-50 rounded-xl p-4 border border-slate-200 overflow-x-auto">
+                    <div class="min-w-max">
+                        <!-- Table Header -->
+                        <div class="flex gap-4 mb-2 font-semibold text-slate-500 text-sm border-b border-slate-300 pb-2">
+                            <div class="w-24 text-right pr-4">Address</div>
+                            <div class="flex gap-1">
+                                <div class="w-12 text-center">B0</div>
+                                <div class="w-12 text-center">B1</div>
+                                <div class="w-12 text-center">B2</div>
+                                <div class="w-12 text-center">B3</div>
+                            </div>
+                            <div class="w-32 pl-4">Variable/Purpose</div>
+                        </div>
+
+                        <!-- Stack Rows -->
+                        <div class="space-y-3 font-mono" id="stackGrid">
+                            <!-- Buffer Row 1 -->
+                            <div class="flex gap-4 items-center group">
+                                <div class="w-24 text-right pr-4 text-slate-400 text-sm">0x1000</div>
+                                <div class="flex gap-1" id="row-0">
+                                    <div class="byte-cell w-12 h-12 flex items-center justify-center border-2 border-green-400 bg-green-100 rounded text-xl font-bold" data-index="0"></div>
+                                    <div class="byte-cell w-12 h-12 flex items-center justify-center border-2 border-green-400 bg-green-100 rounded text-xl font-bold" data-index="1"></div>
+                                    <div class="byte-cell w-12 h-12 flex items-center justify-center border-2 border-green-400 bg-green-100 rounded text-xl font-bold" data-index="2"></div>
+                                    <div class="byte-cell w-12 h-12 flex items-center justify-center border-2 border-green-400 bg-green-100 rounded text-xl font-bold" data-index="3"></div>
+                                </div>
+                                <div class="w-32 pl-4 text-green-700 font-semibold text-sm">Buffer[0..3]</div>
+                            </div>
+
+                            <!-- Buffer Row 2 -->
+                            <div class="flex gap-4 items-center group">
+                                <div class="w-24 text-right pr-4 text-slate-400 text-sm">0x1004</div>
+                                <div class="flex gap-1" id="row-1">
+                                    <div class="byte-cell w-12 h-12 flex items-center justify-center border-2 border-green-400 bg-green-100 rounded text-xl font-bold" data-index="4"></div>
+                                    <div class="byte-cell w-12 h-12 flex items-center justify-center border-2 border-green-400 bg-green-100 rounded text-xl font-bold" data-index="5"></div>
+                                    <div class="byte-cell w-12 h-12 flex items-center justify-center border-2 border-green-400 bg-green-100 rounded text-xl font-bold" data-index="6"></div>
+                                    <div class="byte-cell w-12 h-12 flex items-center justify-center border-2 border-green-400 bg-green-100 rounded text-xl font-bold" data-index="7"></div>
+                                </div>
+                                <div class="w-32 pl-4 text-green-700 font-semibold text-sm">Buffer[4..7]</div>
+                            </div>
+
+                            <!-- Saved EBP -->
+                            <div class="flex gap-4 items-center group">
+                                <div class="w-24 text-right pr-4 text-slate-400 text-sm">0x1008</div>
+                                <div class="flex gap-1" id="row-2">
+                                    <div class="byte-cell w-12 h-12 flex items-center justify-center border-2 border-yellow-400 bg-yellow-100 rounded text-xl font-bold" data-index="8"></div>
+                                    <div class="byte-cell w-12 h-12 flex items-center justify-center border-2 border-yellow-400 bg-yellow-100 rounded text-xl font-bold" data-index="9"></div>
+                                    <div class="byte-cell w-12 h-12 flex items-center justify-center border-2 border-yellow-400 bg-yellow-100 rounded text-xl font-bold" data-index="10"></div>
+                                    <div class="byte-cell w-12 h-12 flex items-center justify-center border-2 border-yellow-400 bg-yellow-100 rounded text-xl font-bold" data-index="11"></div>
+                                </div>
+                                <div class="w-32 pl-4 text-yellow-700 font-semibold text-sm">Saved EBP</div>
+                            </div>
+
+                            <!-- Return Address -->
+                            <div class="flex gap-4 items-center group">
+                                <div class="w-24 text-right pr-4 text-slate-400 text-sm">0x100C</div>
+                                <div class="flex gap-1" id="row-3">
+                                    <div class="byte-cell w-12 h-12 flex items-center justify-center border-2 border-blue-400 bg-blue-100 rounded text-xl font-bold" data-index="12"></div>
+                                    <div class="byte-cell w-12 h-12 flex items-center justify-center border-2 border-blue-400 bg-blue-100 rounded text-xl font-bold" data-index="13"></div>
+                                    <div class="byte-cell w-12 h-12 flex items-center justify-center border-2 border-blue-400 bg-blue-100 rounded text-xl font-bold" data-index="14"></div>
+                                    <div class="byte-cell w-12 h-12 flex items-center justify-center border-2 border-blue-400 bg-blue-100 rounded text-xl font-bold" data-index="15"></div>
+                                </div>
+                                <div class="w-32 pl-4 text-blue-700 font-semibold text-sm leading-tight">Return Address (EIP)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-5 bg-white rounded-2xl shadow-xl p-6 border border-slate-100 prose prose-slate">
+                <h2 class="text-2xl font-bold text-slate-800 mb-4 border-b pb-2">The Theory</h2>
+                
+                <div class="bg-indigo-50 border-l-4 border-indigo-500 p-4 mb-6 rounded-r-lg">
+                    <h3 class="text-indigo-800 mt-0 mb-2 font-semibold">What is a Buffer Overflow?</h3>
+                    <p class="text-sm text-indigo-900 m-0">
+                        A buffer overflow occurs when a program writes more data to a block of memory (the buffer) than it was allocated to hold. In languages like C/C++, certain functions (like <code>strcpy</code> or <code>gets</code>) do not verify the length of the data before writing it.
+                    </p>
+                </div>
+
+                <h3 class="text-lg font-bold text-slate-800">Stack Anatomy</h3>
+                <ul class="text-sm space-y-2 text-slate-600">
+                    <li><strong class="text-green-700">Buffer (Local Variables):</strong> This is memory allocated for the function's internal use. Here, we have an 8-byte buffer.</li>
+                    <li><strong class="text-yellow-700">Saved EBP (Frame Pointer):</strong> The base pointer of the calling function, saved so it can be restored when the current function finishes.</li>
+                    <li><strong class="text-blue-700">Return Address (EIP):</strong> The critical instruction pointer! This tells the CPU exactly where to resume execution after the function finishes.</li>
+                </ul>
+
+                <h3 class="text-lg font-bold text-slate-800 mt-6">The Attack</h3>
+                <p class="text-sm text-slate-600">
+                    Because memory addresses grow "upwards" sequentially while writing a string, exceeding the 8-byte buffer causes the program to seamlessly continue writing into the adjacent memory.
+                </p>
+                <p class="text-sm text-slate-600">
+                    If an attacker overflows the buffer with carefully crafted data, they can overwrite the <strong>Return Address</strong>. When the function returns, instead of going back to the legitimate calling program, the CPU jumps to whatever address the attacker wrote, potentially executing malicious code!
+                </p>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const inputString = document.getElementById('inputString');
+            const resetBtn = document.getElementById('resetBtn');
+            const statusBox = document.getElementById('statusBox');
+            const byteCells = Array.from(document.querySelectorAll('.byte-cell'));
+
+            // Sort cells by data-index to ensure correct mapping
+            byteCells.sort((a, b) => parseInt(a.dataset.index) - parseInt(b.dataset.index));
+
+            // Default configurations for resetting cells
+            const defaultConfigs = [
+                { limit: 8, classes: ['border-green-400', 'bg-green-100'] },
+                { limit: 12, classes: ['border-yellow-400', 'bg-yellow-100'] },
+                { limit: 16, classes: ['border-blue-400', 'bg-blue-100'] }
+            ];
+
+            function updateVisualization() {
+                const text = inputString.value;
+                const len = text.length;
+
+                // Update each byte cell
+                byteCells.forEach((cell, i) => {
+                    // Reset to default styling first
+                    cell.className = `byte-cell w-12 h-12 flex items-center justify-center border-2 rounded text-xl font-bold`;
+                    
+                    let baseClasses = [];
+                    if (i < 8) baseClasses = defaultConfigs[0].classes;
+                    else if (i < 12) baseClasses = defaultConfigs[1].classes;
+                    else baseClasses = defaultConfigs[2].classes;
+                    
+                    cell.classList.add(...baseClasses);
+
+                    // Set character or empty
+                    if (i < len) {
+                        cell.textContent = text[i];
+                        cell.classList.add('byte-filled');
+                    } else {
+                        cell.textContent = '';
+                        cell.classList.remove('byte-filled');
+                    }
+
+                    // Apply overflow coloring
+                    if (i >= 8 && i < len) {
+                        // Cell is overwritten!
+                        cell.classList.remove(...baseClasses);
+                        cell.classList.add('bg-red-500', 'border-red-700', 'text-white');
+                    } else if (i < len) {
+                        // Safe filled cell
+                        cell.classList.add('text-slate-800');
+                    }
+                });
+
+                // Update Status Box
+                statusBox.className = 'p-4 rounded-lg font-medium transition-all duration-300 min-h-[4rem] flex items-center ';
+                
+                if (len <= 8) {
+                    statusBox.classList.add('bg-green-50', 'border', 'border-green-200', 'text-green-800');
+                    statusBox.innerHTML = '<strong>Status: Safe.</strong> Buffer has space. No critical memory overwritten.';
+                } else if (len <= 12) {
+                    statusBox.classList.add('bg-yellow-100', 'border-2', 'border-yellow-400', 'text-yellow-800');
+                    statusBox.innerHTML = '<strong>Warning:</strong> Buffer limit exceeded! Saved EBP (Frame Pointer) is being overwritten. This will cause a crash (Segmentation Fault).';
+                } else {
+                    statusBox.classList.add('pulsing-danger', 'text-red-900', 'border-2');
+                    statusBox.innerHTML = '<strong>DANGER:</strong> Return Address (EIP) Overwritten! When this function exits, it will try to jump to the attacker-controlled address. Control Flow Hijack possible!';
+                }
+            }
+
+            // Event Listeners
+            inputString.addEventListener('input', updateVisualization);
+
+            resetBtn.addEventListener('click', () => {
+                inputString.value = '';
+                updateVisualization();
+                inputString.focus();
+            });
+
+            // Initial render
+            updateVisualization();
+        });
+    </script>
+</body>
+</html>
